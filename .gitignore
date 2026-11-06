@@ -41,3 +41,15 @@ yarn-error.log*
 next-env.d.ts
 .env.local
 agent-audit.log
+chat-history.json
+failed_requests.json
+# Python
+python-evals/venv/
+python-evals/__pycache__/
+*.pyc
+eval_results.csv
+business_report.png
+checkpoint.json
+chat-history.json
+failed_requests.json
+agent-audit.log

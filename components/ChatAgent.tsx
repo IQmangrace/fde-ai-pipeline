@@ -2,16 +2,33 @@
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
 
 export default function ChatAgent() {
   const [input, setInput] = useState('');
+  const hasLoadedHistory = useRef(false);
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: '/api/agent' }),
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
+
+  // 🚨 DAY 12: Load history from disk when the page mounts
+  useEffect(() => {
+    if (hasLoadedHistory.current) return;
+    hasLoadedHistory.current = true;
+
+    fetch('/api/chat-history')
+      .then((res) => res.json())
+      .then((data) => {
+        // If we have saved history, inject it into the chat UI
+        if (data && data.length > 0 && setMessages) {
+          setMessages(data);
+        }
+      })
+      .catch((err) => console.error("Failed to load history", err));
+  }, [setMessages]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -20,11 +37,26 @@ export default function ChatAgent() {
     setInput('');
   };
 
+  const clearChat = async () => {
+    // Delete from backend
+    await fetch('/api/chat-history', { method: 'DELETE' });
+    // Clear frontend
+    if (setMessages) setMessages([]);
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <div className="mb-8 border-b border-gray-800 pb-4">
-        <h1 className="text-3xl font-bold">Agent Chat</h1>
-        <p className="text-gray-400 mt-2">Day 3: Memory, Guardrails, and Tools.</p>
+      <div className="mb-8 border-b border-gray-800 pb-4 flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-bold">Agent Chat</h1>
+          <p className="text-gray-400 mt-2">Day 12: Persistent Chat History.</p>
+        </div>
+        <button 
+          onClick={clearChat}
+          className="text-sm bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-gray-300"
+        >
+          🗑️ Clear History
+        </button>
       </div>
 
       <div className="mb-4 h-[500px] overflow-y-auto space-y-6 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-2xl">
@@ -51,10 +83,10 @@ export default function ChatAgent() {
                 : 'bg-gray-800 text-gray-200 rounded-bl-none border border-gray-700'
             }`}>
               {m.parts && m.parts.map((part, i) => {
-                if (part.type === 'tool-getCustomerRecord') {
+                if (part.type.startsWith('tool-')) {
                   return (
                     <div key={i} className="mb-2 text-xs bg-gray-900 text-yellow-400 p-2 rounded border border-yellow-900/50 italic">
-                      ⚙️ Thinking: Running getCustomerRecord...
+                      ⚙️ Thinking: Running {part.type.replace('tool-', '')}...
                     </div>
                   );
                 }

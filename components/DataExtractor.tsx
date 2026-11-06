@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function DataExtractor() {
   const [input, setInput] = useState('');
@@ -9,6 +9,21 @@ export default function DataExtractor() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  
+  // NEW: State for the checkpoint
+  const [savedState, setSavedState] = useState<{ type: string; data: Record<string, unknown>; lastUpdated?: string } | null>(null);
+
+  // NEW: Check for a saved checkpoint when the page loads
+  useEffect(() => {
+    fetch('/api/checkpoint')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.hasCheckpoint) {
+          setSavedState(data.state);
+        }
+      })
+      .catch((err) => console.error("Failed to load checkpoint", err));
+  }, []);
 
   const handleExtract = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,14 +77,46 @@ export default function DataExtractor() {
       
       <div className="mb-8 border-b border-gray-800 pb-4">
         <h1 className="text-3xl font-bold">Data Extractor</h1>
-        <p className="text-gray-400 mt-2">Day 4 & 6: Structured Outputs & Database Push.</p>
+        <p className="text-gray-400 mt-2">Day 11: Checkpointing & State Management.</p>
       </div>
+
+      {/* NEW: The Checkpoint Resume Banner */}
+      {savedState && (
+        <div className="mb-6 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg flex justify-between items-center">
+          <div>
+            <p className="text-yellow-500 font-bold">⚠️ Unsaved Work Found</p>
+            <p className="text-sm text-yellow-200">
+              You have a pending extraction from {savedState.lastUpdated ? new Date(savedState.lastUpdated).toLocaleTimeString() : 'earlier'}.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => {
+                setResult(savedState.data);
+                setInput(`Resumed session from ${savedState.lastUpdated}`);
+              }}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm font-bold"
+            >
+              Resume
+            </button>
+            <button 
+              onClick={async () => {
+                await fetch('/api/checkpoint', { method: 'DELETE' });
+                setSavedState(null);
+              }}
+              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleExtract} className="flex flex-col gap-4 mb-8">
         <textarea
           className="w-full h-32 p-4 rounded-xl bg-gray-900 border border-gray-700 focus:outline-none focus:border-blue-500 text-white shadow-inner"
           value={input}
-          placeholder="Paste a messy email here. e.g., 'Hey, my name is Sarah and I was double charged on my credit card. I need this fixed ASAP!'"
+          placeholder="Paste a messy email here..."
           onChange={(e) => setInput(e.target.value)}
           disabled={isLoading}
         />

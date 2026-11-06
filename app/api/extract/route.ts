@@ -1,47 +1,89 @@
 import { groq } from '@ai-sdk/groq';
-import { generateObject } from 'ai'; // Notice we are using generateObject, not streamText
+import { generateObject } from 'ai';
 import { z } from 'zod';
 import { logEvent } from '@/app/lib/logger';
+import { withRetry } from '@/app/lib/retry';
 
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  // We expect a simple string prompt from the user
   const { prompt } = await req.json();
 
   logEvent('EXTRACT_REQUEST', { prompt });
 
-  // This is the magic function for structured data
-    const result = await generateObject({
-    model: groq('openai/gpt-oss-120b'),
-    
-    // NEW: Strict business rules for the AI
-    system: `You are a data extraction agent for a SaaS company.
-             Follow these rules strictly:
-             1. customerName: If the user does not provide their name, you MUST output exactly the string "Unknown". Do not use "Anonymous" or leave it blank.
-             2. intent: 
-                - "billing" = refunds, charges, invoices.
-                - "sales" = asking to buy, upgrade, or talk to sales.
-                - "support_request" = bugs, crashes, errors, how-to questions.
-                - "other" = cancellations, general feedback, greetings.
-             3. urgency: 
-                - "high" = angry, losing money, demands immediate action.
-                - "medium" = a bug or issue that needs fixing but isn't critical.
-                - "low" = casual questions, feedback, or greetings.`,
-             
-    schema: z.object({
-      customerName: z.string().describe('The name of the customer.'),
-      intent: z.enum(['support_request', 'billing', 'sales', 'other']).describe('The main reason they are contacting us.'),
-      urgency: z.enum(['low', 'medium', 'high']).describe('How urgent the request seems based on the tone.'),
-      summary: z.string().describe('A one-sentence summary of what they want.'),
-    }),
-    
-    prompt: prompt,
-  });
+  try {
+    const result = await withRetry(async () => {
+      return await generateObject({
+        model: groq('openai/gpt-oss-120b'),
+        
+        system: `You are a secure data extraction agent for Apex Wealth Management.
+                 Follow these rules strictly:
+                 1. customerName: If the user does not provide their name, you MUST output exactly the string "Unknown".
+                 2. intent: 
+                    - "wire_transfer" = moving money, transfers, sending funds.
+                    - "account_balance_inquiry" = asking how much money is in an account, checking balance.
+                    - "kyc_onboarding" = opening a new account, providing ID, joint accounts.
+                    - "fraud_report" = lost card, hacked account, unauthorized charges, blackmail.
+                    - "other" = general questions, feedback, cancellations, software bugs, password resets, deposits, card replacements.
+                 3. urgency rules (Follow these EXACTLY):
+                    - "critical" = ANY fraud report, unauthorized transaction, or blackmail threat.
+                    - "high" = wire transfers OR the text contains the words: "frustrating", "frustrated", "furious", "hacked", "ASAP".
+                    - "medium" = account_balance_inquiry, kyc_onboarding, password resets, login issues, deposits, card replacements, plan upgrades, or any request for account help.
+                    - "low" = The text contains "canceling" or "cancel" (without extreme anger words), greetings, or general feedback.
+                 4. amount: Extract ONLY the raw number. If the user writes "$50,000", output 50000. If no amount is provided, output null.
+                 5. MIXED INTENTS: If an email contains multiple requests (e.g., balance check AND a transfer), prioritize the first request mentioned.`,
+                 
+        schema: z.object({
+          customerName: z.string().describe('The name of the customer. If no name is provided, use "Unknown".'),
+          intent: z.enum([
+            'wire_transfer', 
+            'account_balance_inquiry', 
+            'kyc_onboarding', 
+            'fraud_report', 
+            'other'
+          ]).describe('The financial intent of the email.'),
+          amount: z.number().nullable().describe('The dollar amount mentioned. Return null if no amount is mentioned.'),
+          urgency: z.enum(['low', 'medium', 'high', 'critical']).describe('The urgency of the request. Fraud reports are always critical.'),
+          summary: z.string().describe('A one-sentence summary of the financial request.'),
+        })
+        .refine((data) => {
+          if (data.intent === 'wire_transfer' && (data.amount === null || data.amount <= 0)) {
+            return false;
+          }
+          return true;
+        }, {
+          message: "Wire transfers must have a valid amount greater than 0.",
+          path: ["amount"], 
+        })
+        .refine((data) => {
+          if (data.intent === 'fraud_report' && data.urgency !== 'critical') {
+            return false;
+          }
+          return true;
+        }, {
+          message: "Fraud reports must always be marked as critical urgency.",
+          path: ["urgency"],
+        }),
+        
+        prompt: prompt,
+      });
+    });
 
-  // 3. We log the clean JSON output
-  logEvent('EXTRACT_RESULT', result.object);
+    logEvent('EXTRACT_RESULT', result.object);
 
-  // 4. Return the raw JSON to the frontend
-  return Response.json(result.object);
+    return Response.json({
+      ...result.object,
+      usage: result.usage, 
+    });
+
+  } catch (error) {
+    console.error("AI Extraction Failed after retries:", error);
+    
+    logEvent('EXTRACT_ERROR', { error: error instanceof Error ? error.message : 'Unknown error' });
+
+    return Response.json(
+      { error: "The AI service is currently unable to process this request after multiple attempts. Please try again later." },
+      { status: 500 }
+    );
+  }
 }

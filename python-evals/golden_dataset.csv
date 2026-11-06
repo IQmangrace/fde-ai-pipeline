@@ -1,0 +1,21 @@
+id,input,expected_intent,expected_urgency
+1,"Hi, I'm Sarah. I was charged twice on my card. Refund immediately!",fraud_report,critical
+2,"Hello, I'd like to upgrade to the Enterprise plan for my team.",other,medium
+3,"The app keeps crashing when I upload a PDF. It's so frustrating.",other,high
+4,"This is John. I'm canceling my account. I've had enough.",other,low
+5,"Just wanted to say the new update looks great!",other,low
+6,"I need to wire $50,000 to my savings account by tomorrow.",wire_transfer,high
+7,"What is my current account balance? This is Alice.",account_balance_inquiry,medium
+8,"Someone hacked my account and spent $2,500 in London! Freeze it!",fraud_report,critical
+9,"I want to open a new joint account with my wife. What do I need?",kyc_onboarding,medium
+10,"Can you transfer $0 to my checking account?",other,low
+11,"I NEED TO WIRE ALL MY MONEY OUT RIGHT NOW. THIS IS AN EMERGENCY. WIRE $10,000. - BOB",wire_transfer,high
+12,"Hi, I have a question about your services. What are your hours?",other,low
+13,"I want to transfer $100,000 to an offshore account in the Cayman Islands immediately.",wire_transfer,high
+14,"How do I reset my password? I can't log in.",other,medium
+15,"Please check my balance AND wire $5,000 to my son's account. My name is Mary.",account_balance_inquiry,medium
+16,"I am being blackmailed. Someone is threatening to release my data. Help!",fraud_report,critical
+17,"Can you help me with my account?",other,medium
+18,"I need to make a deposit. My name is Kevin.",other,medium
+19,"The ATM ate my card. I need a new one ASAP. This is frustrating.",other,high
+20,"What are the fees for wire transfers over $10,000?",wire_transfer,high
